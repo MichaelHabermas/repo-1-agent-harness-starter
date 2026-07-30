@@ -57,10 +57,6 @@ Northwind's internal assistant answers employee questions about HR and IT: the h
 It works on the happy path. Ask it how many days off you have and it tells you.
 That is the whole problem: the happy path is not the job.
 
----
-
-*The mock model, the company data and the incidents in the golden set are fictional. The failure modes are not.*
-
 ## The live version
 
 Everything above runs offline against the scripted MockModel. Same harness, real brain:
@@ -69,11 +65,10 @@ Everything above runs offline against the scripted MockModel. Same harness, real
     python3 app/cli.py --live "how many days off do I have?"
     python3 demo_variance.py             # one mock run vs three live runs, side by side
 
-Live runs use a cheap model on purpose (default `google/gemini-2.5-flash-lite`,
-override with `OPENROUTER_MODEL`). Cheap models make real mistakes — invented
-tool names, malformed arguments, skipped steps — which is exactly what the
-validation, retry, and budget layers are for. Cost is capped at $0.05 per run;
-a typical run is well under a cent. No key set → `--live` says so and exits.
+Live runs use a cheap model on purpose (default `google/gemini-2.5-flash-lite`, override with `OPENROUTER_MODEL`). Cheap models make real mistakes — invented tool names, malformed arguments, skipped steps — which is exactly what the validation, retry, and budget layers are for. Cost is capped at $0.05 per run; a typical run is well under a cent. No key set → `--live` says so and exits.
 
-One thing worth seeing once: the TODOs below aren't implemented yet, so live
-mode here runs without its guardrails. Watch what that looks like, then build them.
+One thing worth seeing once: the TODOs in `TASKS.md` aren't implemented yet, so live mode here runs without its guardrails. Watch what that looks like, then build them.
+
+---
+
+*The mock model, the company data and the incidents in the golden set are fictional. The failure modes are not.*
