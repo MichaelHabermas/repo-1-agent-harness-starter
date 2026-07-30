@@ -12,7 +12,7 @@ By the end you'll have built the five harness layers, and the same agent will be
 
 ## Getting started
 
-No dependencies. No API key. No network.
+Default path: no dependencies, no API key, no network.
 
 ```bash
 python3 --version          # 3.10 or newer
@@ -37,8 +37,6 @@ app/cli.py        the chat app
 tests/            unit tests for the harness
 ```
 
-
-
 ## Break it first
 
 Before you write anything, spend five minutes making it misbehave:
@@ -62,3 +60,20 @@ That is the whole problem: the happy path is not the job.
 ---
 
 *The mock model, the company data and the incidents in the golden set are fictional. The failure modes are not.*
+
+## The live version
+
+Everything above runs offline against the scripted MockModel. Same harness, real brain:
+
+    export OPENROUTER_API_KEY=...        # openrouter.ai
+    python3 app/cli.py --live "how many days off do I have?"
+    python3 demo_variance.py             # one mock run vs three live runs, side by side
+
+Live runs use a cheap model on purpose (default `google/gemini-2.5-flash-lite`,
+override with `OPENROUTER_MODEL`). Cheap models make real mistakes — invented
+tool names, malformed arguments, skipped steps — which is exactly what the
+validation, retry, and budget layers are for. Cost is capped at $0.05 per run;
+a typical run is well under a cent. No key set → `--live` says so and exits.
+
+One thing worth seeing once: the TODOs below aren't implemented yet, so live
+mode here runs without its guardrails. Watch what that looks like, then build them.

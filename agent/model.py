@@ -30,8 +30,12 @@ analysis exercise -- finding them yourself is the point):
 
 from __future__ import annotations
 
+import json
+import os
 import random
 import re
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -372,7 +376,235 @@ class MockModel:
 
 
 # --------------------------------------------------------------------------
-# The real thing, for when you want it
+# The real thing -- OpenRouter, stdlib only
+# --------------------------------------------------------------------------
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash-lite"
+
+# Approximate USD per million tokens for the default cheap model.
+# Prices drift; check current numbers at https://openrouter.ai/models
+PRICE_PER_MTOK = {
+    "input": 0.10,
+    "output": 0.40,
+}
+
+
+def estimate_cost_usd(prompt_tokens: int, completion_tokens: int,
+                      prices: dict[str, float] | None = None) -> float:
+    """Rough USD cost from token counts. Teaching estimate, not billing."""
+    p = prices or PRICE_PER_MTOK
+    return (
+        (prompt_tokens / 1_000_000.0) * p["input"]
+        + (completion_tokens / 1_000_000.0) * p["output"]
+    )
+
+
+def tools_as_openai_schema() -> list[dict[str, Any]]:
+    """Convert the harness registry into OpenAI-compatible tool definitions.
+
+    Lives here (not in tools.py) so the tool module stays free of provider
+    shapes. The schema is still the contract; this is just packaging.
+    """
+    from agent import tools as tool_mod
+
+    out: list[dict[str, Any]] = []
+    for spec in tool_mod.REGISTRY.values():
+        properties: dict[str, Any] = {}
+        for pname, pdesc in spec.params.items():
+            # params are "type: description" strings in this repo
+            ptype, _, desc = pdesc.partition(":")
+            ptype = ptype.strip()
+            json_type = "number" if ptype == "number" else "string"
+            properties[pname] = {
+                "type": json_type,
+                "description": desc.strip() or pdesc,
+            }
+        out.append({
+            "type": "function",
+            "function": {
+                "name": spec.name,
+                "description": spec.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": list(spec.required),
+                },
+            },
+        })
+    return out
+
+
+def turns_to_messages(turns: list[Turn]) -> list[dict[str, Any]]:
+    """Map harness turns to OpenAI-style chat messages.
+
+    Observations become user messages with a tool tag. That keeps multi-step
+    runs working without storing tool_call_ids on Turn -- the model still uses
+    native tools/tool_calls on the response side.
+    """
+    messages: list[dict[str, Any]] = []
+    for t in turns:
+        if t.role == "user":
+            messages.append({"role": "user", "content": t.content})
+        elif t.role == "assistant":
+            messages.append({"role": "assistant", "content": t.content})
+        elif t.role == "observation":
+            status = "ok" if t.ok else "error"
+            messages.append({
+                "role": "user",
+                "content": f"[tool:{t.tool} {status}] {t.content}",
+            })
+    return messages or [{"role": "user", "content": "(no input)"}]
+
+
+def parse_openrouter_decision(body: dict[str, Any]) -> Decision:
+    """Turn an OpenRouter chat.completions body into a ToolCall or Final.
+
+    Deliberately does NOT repair bad tool names or arguments. Invented tools
+    and missing args must reach the harness's validate_call -- that is a
+    feature, not a bug, in a live teaching demo.
+    """
+    choices = body.get("choices") or []
+    if not choices:
+        return Final("")
+    message = choices[0].get("message") or {}
+    tool_calls = message.get("tool_calls") or []
+    if tool_calls:
+        tc = tool_calls[0] if isinstance(tool_calls[0], dict) else {}
+        fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+        # name may be missing or nonsense -- pass through as-is
+        name = fn.get("name") if fn.get("name") is not None else ""
+        if not isinstance(name, str):
+            name = str(name)
+        raw_args = fn.get("arguments", "{}")
+        args: dict[str, Any]
+        if isinstance(raw_args, dict):
+            args = raw_args
+        elif isinstance(raw_args, str):
+            try:
+                parsed = json.loads(raw_args) if raw_args.strip() else {}
+            except json.JSONDecodeError:
+                # Not repaired into plausible args. Empty dict fails required-arg
+                # validation the same way a real missing-args call does.
+                parsed = {}
+            args = parsed if isinstance(parsed, dict) else {}
+        else:
+            args = {}
+        return ToolCall(name=name, args=args)
+    content = message.get("content")
+    if content is None:
+        content = ""
+    if not isinstance(content, str):
+        content = str(content)
+    return Final(content)
+
+
+def usage_from_response(body: dict[str, Any],
+                        prices: dict[str, float] | None = None) -> dict[str, Any]:
+    """Extract token counts and an estimated cost from a completions body."""
+    usage = body.get("usage") or {}
+    prompt = int(usage.get("prompt_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or 0)
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": int(usage.get("total_tokens") or (prompt + completion)),
+        "cost_usd": round(estimate_cost_usd(prompt, completion, prices), 8),
+    }
+
+
+def build_openrouter_request(
+    *,
+    model: str,
+    system: str,
+    turns: list[Turn],
+    max_tokens: int = 1024,
+) -> dict[str, Any]:
+    """Pure request-body builder. Unit-tested with no network."""
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            *turns_to_messages(turns),
+        ],
+        "tools": tools_as_openai_schema(),
+        "tool_choice": "auto",
+        "max_tokens": max_tokens,
+    }
+
+
+class OpenRouterModel:
+    """Same interface as MockModel — swapping the brain changes one class and nothing else."""
+
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        max_tokens: int = 1024,
+        prices: dict[str, float] | None = None,
+        url: str = OPENROUTER_URL,
+    ):
+        self.name = model or os.environ.get(
+            "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
+        )
+        # Key is held only in memory. Never write it to disk, traces, or logs.
+        self._api_key = api_key if api_key is not None else os.environ.get(
+            "OPENROUTER_API_KEY", ""
+        )
+        self._max_tokens = max_tokens
+        self._prices = prices or dict(PRICE_PER_MTOK)
+        self._url = url
+        self.last_usage: dict[str, Any] = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+        }
+
+    def decide(self, system: str, turns: list[Turn]) -> Decision:
+        if not self._api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY is not set. Export it before using --live."
+            )
+        body = build_openrouter_request(
+            model=self.name,
+            system=system,
+            turns=turns,
+            max_tokens=self._max_tokens,
+        )
+        raw = self._post(body)
+        self.last_usage = usage_from_response(raw, self._prices)
+        return parse_openrouter_decision(raw)
+
+    def _post(self, body: dict[str, Any]) -> dict[str, Any]:
+        data = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(
+            self._url,
+            data=data,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+                # Optional OpenRouter attribution headers; no secrets.
+                "HTTP-Referer": "https://github.com/cloudastructure/repo-1-agent-harness-live",
+                "X-Title": "northwind-agent-harness-live",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")[:400]
+            # Never include the request headers (they hold the key).
+            raise RuntimeError(
+                f"OpenRouter HTTP {e.code}: {detail}"
+            ) from None
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"OpenRouter network error: {e.reason}") from None
+
+
+# --------------------------------------------------------------------------
+# Optional: Anthropic via SDK (pip install anthropic)
 # --------------------------------------------------------------------------
 
 

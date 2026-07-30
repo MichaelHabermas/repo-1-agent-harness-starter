@@ -35,6 +35,7 @@ class GuardrailViolation(Exception):
 @dataclass
 class Budget:
     max_steps: int = 8
+    max_usd_per_run: float = 0.05
     max_cost_usd: float = 0.05
     max_duration_s: float = 30.0
 
