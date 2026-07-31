@@ -61,7 +61,7 @@ That is the whole problem: the happy path is not the job.
 
 Everything above runs offline against the scripted MockModel. Same harness, real brain:
 
-    # once: put OPENROUTER_API_KEY=... in a .env file at the repo root (gitignored)
+    cp .env.example .env                 # once; fill in your key (gitignored)
     python3 app/cli.py --live "how many days off do I have?"
     python3 demo_variance.py             # one mock run vs three live runs, side by side
 
