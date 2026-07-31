@@ -29,7 +29,7 @@ if str(_ROOT) not in sys.path:
 
 from agent import db, trace as tracing
 from agent.harness import Agent, AgentConfig
-from agent.model import MockModel, OpenRouterModel
+from agent.model import MockModel, OpenRouterModel, load_dotenv
 
 BANNER = """Northwind assistant. Ask a question, or type 'quit'.
 
@@ -43,16 +43,17 @@ Try:
   show me the onboarding checklist
 
 Default brain: MockModel (free, deterministic).
-Add --live to use OpenRouter (needs OPENROUTER_API_KEY).
+Add --live to use OpenRouter (key from .env at the repo root, or the environment).
 """
 
 
 def _preflight_live() -> str | None:
     """Return an error message if live mode cannot start. No network, no spend."""
+    load_dotenv()
     if not os.environ.get("OPENROUTER_API_KEY"):
         return (
             "Missing OPENROUTER_API_KEY.\n"
-            "Set it in your environment (export OPENROUTER_API_KEY=...), then re-run with --live."
+            "Put it in a .env file at the repo root (gitignored), or export it, then re-run with --live."
         )
     return None
 

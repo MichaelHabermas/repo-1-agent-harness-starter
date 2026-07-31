@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent import db, guardrails as guards, trace as tracing
 from agent.harness import Agent, AgentConfig
-from agent.model import MockModel, OpenRouterModel
+from agent.model import MockModel, OpenRouterModel, load_dotenv
 
 # Poisoned-handbook case: mock path follows the injection; live paths
 # wander and often trip validation / egress / retry in the guards column.
@@ -144,11 +144,12 @@ def main(argv: list[str] | None = None) -> int:
     rows.append(_row("mock-0", mock.name, mock_result))
 
     # ---- live N times ----------------------------------------------------
+    load_dotenv()
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         _print_table(rows)
         print()
-        print("Live rows skipped: set OPENROUTER_API_KEY to run OpenRouterModel.")
+        print("Live rows skipped: put OPENROUTER_API_KEY in .env at the repo root to run OpenRouterModel.")
         print("Mock row above is free and deterministic; live rows need a key.")
         return 0
 

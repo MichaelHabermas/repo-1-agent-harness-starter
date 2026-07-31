@@ -36,10 +36,30 @@ import random
 import re
 import urllib.error
 import urllib.request
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from agent import db
+
+
+def load_dotenv() -> None:
+    """Load KEY=VALUE lines from a .env file at the repo root into os.environ.
+
+    Real environment variables win; the file never overrides them. The file is
+    gitignored -- put your OPENROUTER_API_KEY there once and stop exporting it.
+    """
+    env_file = Path(__file__).resolve().parent.parent / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 # --------------------------------------------------------------------------
