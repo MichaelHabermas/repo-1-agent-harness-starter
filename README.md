@@ -16,7 +16,7 @@ Default path: no dependencies, no API key, no network.
 
 ```bash
 python3 --version          # 3.10 or newer
-python -m app.cli          # talk to it
+python3 -m app.cli          # talk to it
 make help                  # everything you can run
 ```
 
@@ -57,16 +57,19 @@ Northwind's internal assistant answers employee questions about HR and IT: the h
 It works on the happy path. Ask it how many days off you have and it tells you.
 That is the whole problem: the happy path is not the job.
 
-
 Also in here: `python3 leakcheck.py` — a read-only check of your own agent logs and traces for key-shaped strings that ended up where they shouldn't. Run it or don't.
 
 ## The live version
 
 Everything above runs offline against the scripted MockModel. Same harness, real brain:
 
-    cp .env.example .env                 # once; fill in your key (gitignored)
-    python3 app/cli.py --live "how many days off do I have?"
-    python3 demo_variance.py             # one mock run vs three live runs, side by side
+```
+cp .env.example .env                 # once; fill in your key (gitignored)
+python3 app/cli.py --live "how many days off do I have?"
+python3 demo_variance.py             # one mock run vs three live runs, side by side
+python3 demo_variance.py -n 5 --question "how many days off do I have?"
+
+```
 
 Live runs use a cheap model on purpose (default `google/gemini-2.5-flash-lite`, override with `OPENROUTER_MODEL`). Cheap models make real mistakes — invented tool names, malformed arguments, skipped steps — which is exactly what the validation, retry, and budget layers are for. Cost is capped at $0.05 per run; a typical run is well under a cent. No key set → `--live` says so and exits.
 
