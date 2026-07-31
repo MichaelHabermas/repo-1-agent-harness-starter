@@ -15,8 +15,7 @@ python tests/test_agent.py     # 6 of 9 pass right now
 python -m app.cli --trace "book time off from 2026-09-14 to 2026-09-18, 5 days"
 ```
 
-Write down three things the trace should tell you and doesn't. Keep the list;
-you'll check it at the end.
+Write down three things the trace should tell you and doesn't. Keep the list; you'll check it at the end.
 
 ---
 
@@ -52,8 +51,7 @@ the model can read is information it can recover from. Errors are data.
 
 Retry on `spec.effect == "read"`. Do not retry writes.
 
-**Before you code it:** why the asymmetry? What happens if
-`submit_pto_request` succeeds and the *response* is what fails?
+**Before you code it:** why the asymmetry? What happens if `submit_pto_request` succeeds and the *response* is what fails?
 
 ---
 
@@ -61,13 +59,11 @@ Retry on `spec.effect == "read"`. Do not retry writes.
 
 `agent/guardrails.py`, TODOs 4a–4d, then wire them into the loop.
 
-- `check_budget` — steps, dollars, wall clock. Put the rule name in the
-  violation; a step limit and a cost limit lead to different investigations.
+- `check_budget` — steps, dollars, wall clock. Put the rule name in the violation; a step limit and a cost limit lead to different investigations.
 - `check_permission` — tools this caller may not use.
 - `check_precondition` — reads that must happen before a write.
 - `find_secrets` — start with the literal check.
-- Then wire the egress check into `run()`. What should the user see when you
-  stop early? Silence is not an answer.
+- Then wire the egress check into `run()`. What should the user see when you stop early? Silence is not an answer.
 
 Now try:
 
@@ -78,7 +74,7 @@ python -m app.cli "show me the onboarding checklist"
 The handbook contains a document that gives the assistant instructions. Your
 egress check should catch what happens next.
 
-**Build `check_precondition`, but leave `Policy.preconditions` empty by
+**Build** `check_precondition`**, but leave** `Policy.preconditions` **empty by
 default.** Section two measures how often the model skips the balance check on
 its own; section three turns the rule on and proves it with the same number.
 Measure, then fix, then prove the fix — in that order.
@@ -92,9 +88,7 @@ Measure, then fix, then prove the fix — in that order.
 Capture `db.STATE.snapshot()` before and after. Open a span for the model call
 and one per tool call. Put everything that changes behaviour into the config.
 
-**The test:** could a colleague reproduce this exact run from the trace alone?
-If a number in the config is missing, they can't — and neither can you, in three
-weeks, when the score moves and nobody remembers changing anything.
+**The test:** could a colleague reproduce this exact run from the trace alone? If a number in the config is missing, they can't —not in three weeks, when the score moves and nobody remembers changing anything.
 
 ---
 
@@ -105,8 +99,6 @@ python tests/test_agent.py                    # 9 passed
 python -m app.cli --trace "what is the expense policy?"
 ```
 
-The trace now shows three handbook searches for one question. You can see it.
-You still can't prove it's a problem, put a number on it, or stop someone
-shipping it.
+The trace now shows three handbook searches for one question. You can see it. We still haven't proved it's a problem, put a number on it, or stopped someone shipping it.
 
 That's section two.
