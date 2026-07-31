@@ -57,6 +57,9 @@ Northwind's internal assistant answers employee questions about HR and IT: the h
 It works on the happy path. Ask it how many days off you have and it tells you.
 That is the whole problem: the happy path is not the job.
 
+
+Also in here: `python3 leakcheck.py` — a read-only check of your own agent logs and traces for key-shaped strings that ended up where they shouldn't. Run it or don't.
+
 ## The live version
 
 Everything above runs offline against the scripted MockModel. Same harness, real brain:
